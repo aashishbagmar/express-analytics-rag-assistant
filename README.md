@@ -332,6 +332,7 @@ Extended discussion, assumptions, and known limitations: [REPORT.md](REPORT.md).
 
 ## Documentation
 
+- **[WRITEUP.md](WRITEUP.md)** — architecture reasoning, assumptions, chunking/embedding choices, future improvements
 - **[REPORT.md](REPORT.md)** — detailed technical write-up (node design, validation traces, API reference, assumptions, limitations)
 
 ---
