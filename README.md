@@ -17,6 +17,8 @@ This project implements retrieval-augmented generation for technical documentati
 - **Incremental indexing** — corpus re-ingest preserves uploaded documents
 - **74 passing tests**
 
+Assignment design write-up (architecture reasoning, chunking/embedding choices, assumptions): **[WRITEUP.md](WRITEUP.md)**
+
 ---
 
 ## Features
@@ -285,7 +287,8 @@ Detailed validation traces: see [REPORT.md](REPORT.md).
 | **Structural citations** | Derived from metadata, not LLM free-text |
 | **Incremental indexing** | Uploads survive corpus re-ingest |
 
-Extended discussion, assumptions, and known limitations: [REPORT.md](REPORT.md).
+Architecture reasoning, chunking/embedding strategy, assumptions, and build phasing: [WRITEUP.md](WRITEUP.md).  
+Node-level detail, API reference, and validation traces: [REPORT.md](REPORT.md).
 
 ---
 
@@ -332,8 +335,11 @@ Extended discussion, assumptions, and known limitations: [REPORT.md](REPORT.md).
 
 ## Documentation
 
-- **[WRITEUP.md](WRITEUP.md)** — architecture reasoning, assumptions, chunking/embedding choices, future improvements
-- **[REPORT.md](REPORT.md)** — detailed technical write-up (node design, validation traces, API reference, assumptions, limitations)
+| Document | Contents |
+|---|---|
+| **[WRITEUP.md](WRITEUP.md)** | Assignment write-up — thought process, phased build decisions, architecture & workflow reasoning, chunking/embedding strategy, assumptions, known limitations, future improvements |
+| **[REPORT.md](REPORT.md)** | Technical report — node reference, retry/confidence logic, full API examples, validation traces, extended tradeoffs |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Original system design spec and MVP phasing plan |
 
 ---
 
