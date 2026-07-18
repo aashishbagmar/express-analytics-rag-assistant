@@ -1,0 +1,24 @@
+# Runtime dependencies planned for the assignment implementation.
+# Versions are intentionally unpinned in the skeleton; pin them once the
+# implementation is tested in a clean environment.
+
+fastapi
+uvicorn
+langgraph
+langchain
+langchain-community
+pydantic
+pydantic-settings
+chromadb
+sentence-transformers
+python-dotenv
+httpx
+python-multipart
+pydantic-settings
+streamlit
+requests
+PyMuPDF
+python-docx
+
+# Test and quality tooling.
+pytest
