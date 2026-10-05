@@ -1,0 +1,30 @@
+1. Setup (one time)
+
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+2. Start Ollama (optional but recommended)
+
+ollama serve
+ollama pull qwen2.5:14b
+Without Ollama it still runs — it falls back to heuristic grading + extractive answers.
+
+3. Start the API
+
+python -m uvicorn app.main:app --reload
+API docs: http://localhost:8000/docs
+Health: http://localhost:8000/health
+4. Ingest the demo corpus
+
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d '{\"path\":\"data/corpus\"}'
+5. Query it
+
+curl -X POST http://localhost:8000/query -H "Content-Type: application/json" -d '{\"question\":\"How does FastAPI validate request bodies?\"}'
+6. Streamlit UI (separate terminal, venv activated)
+
+streamlit run frontend.py
+Opens at http://localhost:8501 — needs the API running first.
+
+Tests
+
+python -m pytest -q

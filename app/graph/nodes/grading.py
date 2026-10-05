@@ -185,6 +185,16 @@ def grade_documents(
 
         question_terms = _extract_terms(question)
 
+        if use_llm and len(retrieved_docs) > 1:
+            batch_update = _grade_documents_with_llm_batch(
+                retrieved_docs,
+                question,
+                question_terms,
+                service=service,
+            )
+            if batch_update is not None:
+                return batch_update
+
         graded_docs: list[GradedDocument] = []
         grading_results: list[GradingResult] = []
         llm_failures = 0
@@ -216,6 +226,56 @@ def grade_documents(
     except Exception as exc:
         logger.exception("Document grading failed")
         raise GradingNodeError("Unexpected failure while grading documents") from exc
+
+
+def _grade_documents_with_llm_batch(
+    retrieved_docs: list[GradedDocument],
+    question: str,
+    question_terms: set[str],
+    *,
+    service: LLMService,
+) -> Optional[GradingUpdate]:
+    """
+    Grade all retrieved chunks in one batched LLM call.
+
+    Returns None if the batch call fails so the caller can fall back to
+    per-chunk grading/heuristics.
+    """
+    chunk_ids = [_resolve_chunk_id(document) for document in retrieved_docs]
+    items = [(chunk_id, document["content"]) for chunk_id, document in zip(chunk_ids, retrieved_docs)]
+
+    try:
+        verdicts_by_id = service.grade_relevance_batch(question, items)
+    except LLMServiceError:
+        logger.warning("Batched LLM grading failed; falling back to per-chunk grading")
+        return None
+    except Exception:
+        logger.exception("Unexpected batched LLM grading failure; falling back to per-chunk grading")
+        return None
+
+    graded_docs: list[GradedDocument] = []
+    grading_results: list[GradingResult] = []
+
+    for document, chunk_id in zip(retrieved_docs, chunk_ids):
+        verdict_payload = verdicts_by_id[chunk_id]
+        is_relevant = verdict_payload["verdict"] == "relevant"
+        result: GradingResult = {
+            "chunk_id": chunk_id,
+            "verdict": verdict_payload["verdict"],
+            "confidence": verdict_payload["confidence"],
+            "reason": verdict_payload["reason"],
+        }
+        grading_results.append(result)
+        if is_relevant:
+            graded_docs.append(document)
+
+    logger.info(
+        "Batched LLM graded %d documents; relevant=%d irrelevant=%d",
+        len(retrieved_docs),
+        len(graded_docs),
+        len(retrieved_docs) - len(graded_docs),
+    )
+    return {"graded_docs": graded_docs, "grading_results": grading_results}
 
 
 def _extract_question(state: GraphState) -> str:

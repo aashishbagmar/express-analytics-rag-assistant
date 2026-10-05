@@ -51,6 +51,18 @@ _GRADE_RELEVANCE_SYSTEM_PROMPT = (
     "the question's subject matter."
 )
 
+_GRADE_RELEVANCE_BATCH_SYSTEM_PROMPT = (
+    "You are a strict relevance grader for a retrieval-augmented generation "
+    "system. Given a user QUESTION and multiple retrieved CHUNKS (each with "
+    "a chunk_id), decide whether each chunk helps answer the question. "
+    "Respond ONLY with a JSON object of the exact shape: "
+    '{"results": [{"chunk_id": "<id>", "verdict": "relevant" | "irrelevant", '
+    '"confidence": <float 0.0-1.0>, "reason": "<one short sentence>"}, ...]}. '
+    "Include exactly one result per chunk_id provided, in any order. "
+    "Be conservative: mark a chunk irrelevant unless it clearly relates to "
+    "the question's subject matter."
+)
+
 _GENERATE_ANSWER_SYSTEM_PROMPT = (
     "You are a retrieval-augmented AI assistant.\n\n"
     "Use ONLY the supplied context.\n\n"
@@ -110,6 +122,47 @@ class LLMService:
             user_prompt=user_prompt,
         )
         return self._parse_grade_response(raw_content)
+
+    def grade_relevance_batch(
+        self,
+        question: str,
+        items: list[tuple[str, str]],
+    ) -> dict[str, dict[str, Any]]:
+        """
+        Grade multiple (chunk_id, content) pairs in a single LLM call.
+
+        Args:
+            question: The user's original question.
+            items: ``(chunk_id, chunk_text)`` pairs to grade.
+
+        Returns:
+            Mapping of ``chunk_id`` to
+            ``{"verdict", "confidence", "reason"}`` for each input id.
+
+        Raises:
+            LLMServiceError: if the LLM call fails or the response cannot be
+                parsed into the expected batched shape.
+        """
+        if not items:
+            return {}
+
+        if len(items) == 1:
+            chunk_id, chunk = items[0]
+            return {chunk_id: self.grade_relevance(question, chunk)}
+
+        chunks_block = "\n\n".join(
+            f'CHUNK_ID: "{chunk_id}"\n{content.strip()}' for chunk_id, content in items
+        )
+        user_prompt = (
+            f"QUESTION:\n{question}\n\n"
+            f"CHUNKS ({len(items)} total):\n{chunks_block}\n\n"
+            "Return only the JSON results object described in your instructions."
+        )
+        raw_content = self._call_chat(
+            system_prompt=_GRADE_RELEVANCE_BATCH_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+        )
+        return self._parse_batch_grade_response(raw_content, expected_ids=[cid for cid, _ in items])
 
     def generate_answer(self, question: str, context: str) -> dict[str, str]:
         """
@@ -210,6 +263,59 @@ class LLMService:
             "confidence": max(0.0, min(1.0, float(confidence))),
             "reason": reason.strip(),
         }
+
+    def _parse_batch_grade_response(
+        self,
+        raw_content: str,
+        *,
+        expected_ids: list[str],
+    ) -> dict[str, dict[str, Any]]:
+        """Parse and validate a batched grading payload returned by the LLM."""
+        try:
+            parsed = json.loads(raw_content)
+        except json.JSONDecodeError as exc:
+            logger.warning("LLM batch grading response was not valid JSON: %r", raw_content)
+            raise LLMServiceError("LLM batch grading response was not valid JSON") from exc
+
+        if not isinstance(parsed, dict):
+            raise LLMServiceError("LLM batch grading response must be a JSON object")
+
+        raw_results = parsed.get("results")
+        if not isinstance(raw_results, list):
+            raise LLMServiceError("LLM batch grading response missing results list")
+
+        by_id: dict[str, dict[str, Any]] = {}
+        for index, entry in enumerate(raw_results):
+            if not isinstance(entry, dict):
+                raise LLMServiceError(f"LLM batch grading results[{index}] must be an object")
+            chunk_id = entry.get("chunk_id")
+            if not isinstance(chunk_id, str) or not chunk_id.strip():
+                raise LLMServiceError(f"LLM batch grading results[{index}] missing chunk_id")
+            verdict = entry.get("verdict")
+            confidence = entry.get("confidence")
+            reason = entry.get("reason")
+            if verdict not in ("relevant", "irrelevant"):
+                raise LLMServiceError(
+                    f"LLM batch grading results[{index}] had invalid verdict: {verdict!r}"
+                )
+            if not isinstance(confidence, (int, float)):
+                raise LLMServiceError(
+                    f"LLM batch grading results[{index}] had non-numeric confidence"
+                )
+            if not isinstance(reason, str) or not reason.strip():
+                raise LLMServiceError(f"LLM batch grading results[{index}] had empty reason")
+            by_id[chunk_id.strip()] = {
+                "verdict": verdict,
+                "confidence": max(0.0, min(1.0, float(confidence))),
+                "reason": reason.strip(),
+            }
+
+        missing = [chunk_id for chunk_id in expected_ids if chunk_id not in by_id]
+        if missing:
+            raise LLMServiceError(
+                f"LLM batch grading response missing chunk_ids: {missing[:5]}"
+            )
+        return by_id
 
     def _parse_answer_response(self, raw_content: str) -> dict[str, str]:
         """Parse and validate the JSON answer payload returned by the LLM."""

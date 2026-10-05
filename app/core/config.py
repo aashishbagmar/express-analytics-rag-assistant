@@ -41,11 +41,11 @@ class Settings(BaseSettings):
         description="Base URL of the local Ollama server. No API key required.",
     )
     ollama_model: str = Field(
-        default="qwen2.5:14b",
+        default="llama3:8b",
         description="Ollama model name used for grading/generation calls.",
     )
     llm_request_timeout_seconds: float = Field(
-        default=30.0,
+        default=90.0,
         description="Timeout for a single LLM request before failing over.",
     )
     llm_grading_enabled: bool = Field(
